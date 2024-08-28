@@ -1,8 +1,11 @@
 const express = require('express')
 const morgan = require('morgan')
-const cors = require('cors'
+const cors = require('cors')
+require('dotenv').config()
 
-)
+const Person = require('./models/person')
+
+
 const app = express()
 
 app.use(express.json())
@@ -12,37 +15,31 @@ app.use(morgan(':method :url :status :response-time ms - :res[content-length] :b
 
 app.use(cors())
 app.use(express.static('dist'))
-let people = [
-    { 
-      "id": "1",
-      "name": "Arto Hellas", 
-      "number": "040-123456"
-    },
-    { 
-      "id": "2",
-      "name": "Ada Lovelace", 
-      "number": "39-44-5323523"
-    },
-    { 
-      "id": "3",
-      "name": "Dan Abramov", 
-      "number": "12-43-234345"
-    },
-    { 
-      "id": "4",
-      "name": "Mary Poppendieck", 
-      "number": "39-23-6423122"
+
+const errorHandler = (error, request, response, next) => {
+    console.log(error)
+    if(error.name === 'CastError'){
+        return response.status(400).send({ error: 'malformatted id'})
+    } else if (error.name === 'ValidationError') {
+        return response.status(400).json({ error: error.message })
     }
-]
 
-const generateId = () => Math.round(Math.random() * 1000000) // ids up to one million
+    next(error)
+}
 
-app.get('/api/persons', (request, response) => {
-    response.send(people)
+app.get('/api/persons', async (request, response) => {
+    
+    try{
+        const people = await Person.find({})
+        response.json(people)
+    } catch(exception) {console.log(exception)}
+
+
 })
 
-app.post('/api/persons', (request, response) => {
+app.post('/api/persons', async (request, response, next) => {
     const body = request.body
+    const people = await Person.find({})
 
     if(!body || !body.name || !body.name){
         return response.status(400).send({
@@ -61,31 +58,50 @@ app.post('/api/persons', (request, response) => {
     })
 
 
-    const person = {
-        id : generateId(),
+    const person = new Person({
         name: body.name,
         number: body.number
-    }
+    })
 
-    people = people.concat(person)
-    response.send(person)
-})
-
-app.get('/api/persons/:id', (request, response) => {
-    const id = request.params.id
-    const person = people.find(p => p.id === id)
-
-    if(person){
-        response.send(person)
-    } else {
-        response.status(404).end()
+    try{
+        const newPerson = await person.save()
+        response.json(newPerson)
+    } catch(exception){
+        next(exception)
     }
 })
 
-app.delete('/api/persons/:id', (request, response) => {
+app.get('/api/persons/:id', async (request, response, next) => {
     const id = request.params.id
-    people = people.filter(person => person.id !== id)
+    Person.findById(id)
+        .then(person => {
+            if(person) response.json(person)
+            else response.status(404).end()
+        })
+        .catch( error => next(error))
+})
+
+app.delete('/api/persons/:id', async (request, response) => {
+    const id = request.params.id
+    await Person.findByIdAndDelete(id)
     response.status(204).end()
+})
+
+app.put('/api/persons/:id', async (request, response, next) => {
+    const id = request.params.id
+    const person = {
+        number: request.body.number
+    }
+
+    try{
+        const updatedPerson = await Person.findByIdAndUpdate(
+            id, 
+            person, {new: true},
+            { new: true, runValidators: true, context: 'query' })   
+        response.json(updatedPerson)
+    } catch (exception){
+        next(exception)
+    }
 })
 
 app.get('/info', (request, response) => {
@@ -96,8 +112,9 @@ app.get('/info', (request, response) => {
     )
 })
 
+app.use(errorHandler)
 
-const PORT = process.env.PORT ||  3001
+const PORT = process.env.PORT
 
 app.listen(PORT, () => {
     console.log(`APP RUNNING ON PORT ${PORT}`)

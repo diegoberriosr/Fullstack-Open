@@ -63,11 +63,10 @@ const App = () => {
 
 
     try{
-    personService.create({name:newName, number:newNumber})
-    setPersons(persons.concat({name: newName, number: newNumber}))
+    const res = await personService.create({name:newName, number:newNumber})
+    if(res.status === 200) {setPersons(persons.concat({name: newName, number: newNumber}));     setMessage('new contact added!')}
     setNewName('') // clear input
     setNewNumber('')
-    setMessage('new contact added!')
     } catch(exception){ console.log(exception)}
   }
 
